@@ -1,0 +1,661 @@
+;; ===========================================================================
+;; ΛΟΥΚΟΥΜΑΣ / LOUKOUMAS - title screen, 384x272 full overscan, mode 0.
+;;
+;; Both languages live in the same binary: tools/mktext.py builds a string
+;; table per language from text/loukoumas.*.txt and every line drawn here goes
+;; through a message id, never a literal. LANG picks which table txt_lang
+;; starts on, so switching language at run time is one byte.
+;;
+;; L switches language on the title screen, FIRE starts the play field,
+;; Escape comes back.
+;;
+;; Build with TARGET=1 snapshot, 2 DSK, 3 raw binary; LANG=0 English, 1 Greek.
+;; ===========================================================================
+
+    include "config.asm"
+
+    IF TARGET==1
+BUILDSNA
+BANKSET 0
+    ENDIF
+
+;; The title screen is a picture now, so the text goes on top of it rather than
+;; instead of it. The name is drawn twice - black one byte right and two
+;; scanlines down, then yellow - which puts a shadow under it and lets it sit
+;; straight on the wall with no panel round it.
+;;
+;; The panels the rest of the text does get are there for a different reason:
+;; pressing L has to repaint a line, and the only way to repaint a line lying
+;; on a picture is to have cleared the ground under it first. Unpacking the
+;; whole screen again would take well over a second.
+TITLE_XS        EQU 1           ; 1 byte per source pixel = 24 px per letter
+TITLE_YS        EQU 4           ; 8 source rows * 4 = 32 px tall
+
+X_TITLE         EQU 2
+Y_TITLE         EQU 10
+Y_SUBTITLE      EQU 46
+Y_PRESS         EQU 248
+Y_LANGHINT      EQU 260
+
+PANEL_X         EQU 0           ; the top-left panel, clear of the wall clock
+PANEL_W         EQU 78
+PANEL_Y         EQU 6
+PANEL_H         EQU 48
+FOOT_Y          EQU 236         ; and the strip along the bottom
+FOOT_H          EQU DISPLAY_LINES-FOOT_Y
+Y_CREDIT        EQU 236         ; three rows in it: who made it, press fire,
+                                ; and the language
+
+H_SMALL         EQU 8                   ; one small text row
+BLINK_BIT       EQU #20                 ; frame_count bit: ~0.64 s each way
+
+;; ---------------------------------------------------------------------------
+;; The low block: everything that is only ever read. Assembled to run at
+;; DATA_ORG, carried in the file at DATA_STORE, and moved down by the first
+;; dozen instructions of the game. See config.asm for why.
+;;
+;; It comes first in the source because rasm resolves a table entry as it
+;; reads it: rooms.asm names sprites and messages, and play.asm indexes room
+;; records with IY, so all of that has to be defined before either is read.
+;; ---------------------------------------------------------------------------
+;; Assembled where it runs, and NOT where the file carries it: the file
+;; carries tablepack.asm instead, which is the same bytes packed. The bytes
+;; laid down here are never saved - every SAVE in this file starts at
+;; loukoumas_start - so all this block leaves behind is its labels.
+    ORG DATA_ORG
+data_start
+    include "font.asm"
+    include "strings.asm"
+    include "sprites.asm"
+    include "artwork.asm"
+    include "enemykind.asm"
+    include "rooms.asm"
+data_end
+DATA_LEN        EQU data_end-data_start
+
+;; ---------------------------------------------------------------------------
+;; The title screen, packed. Unlike the tables it does not travel anywhere: it
+;; is wanted again every time the player comes back to the title, so it simply
+;; sits here, between the workspace and the file's copy of the low block.
+;; ---------------------------------------------------------------------------
+    ORG PIC_STORE
+    include "titlepic.asm"
+
+;; And the tables themselves, packed, which is what the file actually holds.
+;; tools/mkpack.py builds it from a pass of its own over the six files above.
+    ORG DATA_STORE
+    include "tablepack.asm"
+
+    ORG #4000
+
+;; ---------------------------------------------------------------------------
+loukoumas_start
+    di
+    ld sp,STACK_TOP
+
+    ld bc,#7F8C                 ; mode 0, both ROMs disabled
+    out (c),c
+
+    ld hl,table_packed          ; #0000-#3FFF is RAM now the ROMs are off, so
+    ld de,DATA_ORG              ; the tables can go where they were built for
+    call unpack_tables
+
+    ld hl,pal_blank             ; build the screen unseen
+    call set_pal
+
+    ld a,LANG
+    ld (txt_lang),a
+    ld a,DIFF_HARD              ; the game as it was before there was a choice,
+    ld (difficulty),a           ; so the chooser only ever makes it kinder
+    call difficulty_apply
+    xor a
+    ld (txt_solid),a            ; small text blends until the HUD asks for more
+    ld (txt_big_solid),a        ; and big text blends until the title asks
+    ld a,PEN1_BYTE
+    ld (txt_big_pen),a
+
+    call build_line_tab
+    call draw_title_background
+    call draw_title_text
+
+    call setup_crtc             ; now switch the display to overscan
+    ld hl,pal_play              ; the picture is drawn in the game's own pens
+    call set_pal
+
+    call sfx_init
+    call irq_init
+
+;; ---------------------------------------------------------------------------
+;; Title, then play, then back to the title. The screen is already drawn on
+;; the way in, so only the return trip has to repaint it.
+;; ---------------------------------------------------------------------------
+main_loop
+    call title_loop
+    call difficulty_loop
+    call play_screen
+    ld hl,pal_play
+    call set_pal
+    call draw_title_background
+    call draw_title_text
+    jr main_loop
+
+;; ---------------------------------------------------------------------------
+;; title_loop - one pass per 50 Hz frame; returns when FIRE is pressed.
+;; ---------------------------------------------------------------------------
+title_loop
+    ld hl,loukmus_song
+    xor a                       ; the first and only subsong
+    di
+    call PLY_AKG_Init
+    ei
+
+title_frame
+    call wait_frame
+    di
+    call PLY_AKG_Play           ; one tick a frame, and the player wants the
+    ei                          ; interrupts off while it has the stack
+    call read_controls
+
+    ld a,(ctl_pressed)
+    bit CTL_FIRE,a
+    jr nz,title_done
+
+    bit CTL_LANG,a
+    jr z,title_no_lang
+    ld a,(txt_lang)             ; L cycles to the next language
+    inc a
+    cp LANG_COUNT
+    jr c,title_lang_store
+    xor a
+title_lang_store
+    ld (txt_lang),a
+    call draw_title_text
+
+title_no_lang
+    call blink_press
+    jr title_frame
+
+title_done
+    ret
+
+;; ---------------------------------------------------------------------------
+;; difficulty_loop - how hard, asked once the title has been dismissed and
+;; before the room is painted.
+;;
+;; It borrows the title screen's footer rather than building a screen of its
+;; own: the credit's row carries the question, the blinking "press fire" row
+;; carries the answer, and the language hint's row says how to change it. The
+;; picture behind them is still the title, and the music is still playing,
+;; because the only thing this is waiting for is one more press of fire.
+;;
+;; Three settings, and the one the game has always had is the hard one: the
+;; enemies here are slowed down by being stepped less often rather than by
+;; moving less far, so that nothing has to know about fractions of a byte,
+;; and a robot on easy covers the same ground in twice the time.
+;; ---------------------------------------------------------------------------
+DIFF_COUNT      EQU 3
+DIFF_HARD       EQU 2
+DIFF_SIZE       EQU 4
+
+;; Named rather than written into the table, so the assert below is about the
+;; numbers the game actually uses: none of them may be more than the HUD's one
+;; digit can print.
+LIVES_EASY      EQU 9
+LIVES_MEDIUM    EQU 6
+LIVES_HARD      EQU 3
+    ASSERT LIVES_EASY <= LIVES_CEILING
+    ASSERT LIVES_MEDIUM <= LIVES_CEILING
+    ASSERT LIVES_HARD <= LIVES_CEILING
+
+diff_tab                        ; walk period, fly period, flop stun, lives
+    defb 4,3,200,LIVES_EASY     ; easy:   half speed, four seconds flat out
+    defb 3,2,150,LIVES_MEDIUM   ; medium: two thirds, three seconds
+    defb 2,1,100,LIVES_HARD     ; hard:   what it has always been
+diff_tab_end
+    ASSERT diff_tab_end-diff_tab == DIFF_COUNT*DIFF_SIZE
+
+difficulty_loop
+    ld hl,line_tab+FOOT_Y*2     ; the whole strip, credit and all
+    ld de,FOOT_H
+    ld a,PEN0_BYTE
+    call clear_rows
+
+    ld hl,line_tab+Y_CREDIT*2
+    ld (txt_row),hl
+    ld a,MSG_DIFFICULTY
+    call msg_small_centre
+    ld hl,line_tab+Y_LANGHINT*2
+    ld (txt_row),hl
+    ld a,MSG_DIFFHINT
+    call msg_small_centre
+    call draw_difficulty
+
+difficulty_frame
+    call wait_frame
+    di
+    call PLY_AKG_Play
+    ei
+    call read_controls
+    ld a,(ctl_pressed)
+    bit CTL_FIRE,a
+    jr nz,difficulty_done
+    ld b,a
+    ld a,(difficulty)
+    bit CTL_LEFT,b
+    jr z,difficulty_harder
+    or a
+    jr z,difficulty_frame       ; already as easy as it gets
+    dec a
+    jr difficulty_set
+difficulty_harder
+    bit CTL_RIGHT,b
+    jr z,difficulty_frame
+    inc a
+    cp DIFF_COUNT
+    jr nc,difficulty_frame
+difficulty_set
+    ld (difficulty),a
+    call draw_difficulty
+    jr difficulty_frame
+
+difficulty_done
+    di
+    call PLY_AKG_Stop           ; hand the chip back to the game's effects
+    ei
+    call difficulty_apply
+    jp sfx_init
+
+;; ---------------------------------------------------------------------------
+;; difficulty_apply - the setting into the three bytes that read it.
+;; ---------------------------------------------------------------------------
+difficulty_apply
+    ld a,(difficulty)
+    ld l,a
+    ld h,0
+    add hl,hl
+    add hl,hl                   ; x4, the record length
+    ld de,diff_tab
+    add hl,de
+    ld de,walk_period           ; walk, fly, stun, lives, in that order
+    ld bc,DIFF_SIZE
+    ldir
+    ret
+
+;; ---------------------------------------------------------------------------
+;; draw_difficulty - the answer, on the row the blinking prompt uses. The
+;; three names are one run in the string table, so the setting is the offset.
+;; ---------------------------------------------------------------------------
+    ASSERT MSG_DIFFMED == MSG_DIFFEASY+1
+    ASSERT MSG_DIFFHARD == MSG_DIFFEASY+2
+
+draw_difficulty
+    ld hl,line_tab+Y_PRESS*2
+    ld de,H_SMALL
+    ld a,PEN0_BYTE
+    call clear_rows
+    ld hl,line_tab+Y_PRESS*2
+    ld (txt_row),hl
+    ld a,(difficulty)
+    add a,MSG_DIFFEASY
+    jp msg_small_centre
+
+;; ---------------------------------------------------------------------------
+;; blink_press - flash the "press fire" line, and prove the heartbeat runs at
+;; the right rate while it is at it.
+;;
+;; This routine owns that row: draw_title_text only clears it and leaves
+;; press_state disagreeing with the current phase, so the next call repaints
+;; whichever state the blink is actually in. Having both routines draw there
+;; is what made the line vanish the frame after a language change.
+;; ---------------------------------------------------------------------------
+blink_press
+    ld a,(frame_count)
+    and BLINK_BIT
+    ld b,a
+    ld a,(press_state)
+    cp b
+    ret z
+    ld a,b
+    ld (press_state),a
+    or a
+    jr nz,blink_press_hide      ; visible for the first half of the cycle
+    ld hl,line_tab+Y_PRESS*2
+    ld (txt_row),hl
+    ld a,MSG_PRESS
+    jp msg_small_centre
+blink_press_hide
+    ld hl,line_tab+Y_PRESS*2
+    ld de,H_SMALL
+    ld a,PEN0_BYTE
+    jp clear_rows
+
+;; ---------------------------------------------------------------------------
+;; draw_title_background - navy everywhere, with a coral band across the top
+;; and bottom of the overscan window.
+;;
+;; The bands sit at the very edges of the 384x272 picture, well outside the
+;; 320x200 a stock CPC would show, so they only exist because of the overscan.
+;; Text crossing them comes out white rather than yellow for free - see the
+;; note about OR blending at the top of text.asm.
+;; ---------------------------------------------------------------------------
+draw_title_background
+    IF TITLEPIC
+    ld hl,title_packed
+    jp unpack_pic
+    ELSE
+    ld hl,line_tab              ; see TITLEPIC in config.asm
+    ld de,DISPLAY_LINES
+    ld a,PEN0_BYTE
+    jp clear_rows
+    ENDIF
+
+;; ---------------------------------------------------------------------------
+;; draw_title_text - every line, in whichever language txt_lang is on.
+;; Each row is repainted first so this doubles as the language-change redraw
+;; without having to rebuild the whole screen.
+;; ---------------------------------------------------------------------------
+draw_title_text
+    ;; the panel the name and the subtitle stand on
+    ld a,PANEL_X
+    ld (fill_x),a
+    ld hl,PANEL_W
+    ld (fill_w),hl
+    ld a,PEN0_BYTE
+    ld (fill_b),a
+    ld hl,line_tab+PANEL_Y*2
+    ld de,PANEL_H
+    call fill_rows
+
+    ld a,TITLE_XS
+    ld (txt_xs),a
+    ld a,TITLE_YS
+    ld (txt_ys),a
+    ld a,1
+    ld (txt_big_solid),a        ; written where the letter is, not blended
+
+    ld a,PEN4_BYTE              ; the shadow, down and to the right
+    ld (txt_big_pen),a
+    ld a,X_TITLE+1
+    ld (txt_x),a
+    ld hl,line_tab+(Y_TITLE+2)*2
+    ld (txt_row),hl
+    ld a,MSG_TITLE1
+    call msg_big
+
+    ld a,PEN2_BYTE              ; then the name itself, on top of it
+    ld (txt_big_pen),a
+    ld a,X_TITLE
+    ld (txt_x),a
+    ld hl,line_tab+Y_TITLE*2
+    ld (txt_row),hl
+    ld a,MSG_TITLE1
+    call msg_big
+
+    xor a                       ; leave big text as the banners expect it
+    ld (txt_big_solid),a
+    ld a,PEN1_BYTE
+    ld (txt_big_pen),a
+
+    ld hl,line_tab+Y_SUBTITLE*2
+    ld (txt_row),hl
+    ld a,X_TITLE
+    ld (txt_x),a
+    ld a,MSG_TITLE2
+    call msg_small
+
+    ;; and the strip along the bottom, over the floorboards
+    ld a,PANEL_X
+    ld (fill_x),a
+    ld hl,BYTES_PER_LINE
+    ld (fill_w),hl
+    ld a,PEN0_BYTE
+    ld (fill_b),a
+    ld hl,line_tab+FOOT_Y*2
+    ld de,FOOT_H
+    call fill_rows
+
+    ;; The "press fire" row belongs to blink_press. Clearing it above is
+    ;; enough: leave press_state disagreeing with the current phase and the
+    ;; next frame repaints whichever state the blink is actually in.
+    ld a,(frame_count)
+    and BLINK_BIT
+    xor BLINK_BIT
+    ld (press_state),a
+
+    ld hl,line_tab+Y_CREDIT*2
+    ld (txt_row),hl
+    ld a,MSG_CREDIT
+    call msg_small_centre
+
+    ld hl,line_tab+Y_LANGHINT*2
+    ld (txt_row),hl
+    ld a,MSG_LANGHINT
+    jp msg_small_centre
+
+;; ---------------------------------------------------------------------------
+;; Palette.
+;;
+;; The four colours are the ones loukoumas.md asks for, but the ink order is
+;; not the document's. A glyph pixel only ever sets pen bit 0, so text lands on
+;; pen 1 over the background and pen 3 over a band - the inks are assigned to
+;; put a readable colour on each of those, which the document's order would
+;; not (it would leave white text on bright yellow).
+;;
+;; The document's own Gate Array values are also not the colours it names:
+;; &54 is hardware 20, black, not deep navy, and &5C is hardware 28, dark red,
+;; not coral. These are the named colours.
+;; ---------------------------------------------------------------------------
+pal_title
+    defb 0,   #40+4             ; pen 0 - deep navy, background
+    defb 1,   #40+10            ; pen 1 - butter yellow, text on the background
+    defb 2,   #40+7             ; pen 2 - coral, the overscan bands
+    defb 3,   #40+11            ; pen 3 - white, text crossing a band
+    defb 4,   #40+20            ; the rest are the play palette, so that coming
+    defb 5,   #40+0             ; back to the title does not have to reload
+    defb 6,   #40+30            ; anything the game already set
+    defb 7,   #40+14
+    defb 8,   #40+22
+    defb 9,   #40+18
+    defb 10,  #40+6
+    defb 11,  #40+19
+    defb 12,  #40+28
+    defb 13,  #40+12
+    defb 14,  #40+24
+    defb 15,  #40+3
+    defb #10, #40+4             ; border - navy, blends into the picture
+    defb #FF
+
+    include "crtc.asm"
+    include "video.asm"
+    include "irq.asm"
+    include "keys.asm"
+    include "sound.asm"
+    include "text.asm"
+    include "unpack.asm"
+    include "sprite.asm"
+    include "enemy.asm"
+    include "play.asm"
+
+;; ---------------------------------------------------------------------------
+;; The title tune: Arkos Tracker 3's own AKG player, and the song it exported.
+;;
+;; src/playerakg.asm is Targhan's player, copied in from the tracker's own
+;; distribution so a build needs nothing outside this repository. It is three
+;; kilobytes of self-modifying code and it uses the stack for its own ends, so
+;; it saves and restores SP itself - but it must be called with interrupts
+;; disabled, which is why every call to it here sits between di and ei.
+;;
+;; It owns all three channels, so it only ever runs on the title screen; the
+;; game's own effects in sound.asm have the chip to themselves once play
+;; starts. Nothing in the two ever runs at the same time.
+;; ---------------------------------------------------------------------------
+PLY_AKG_REMOVE_HOOKS = 1
+    include "playerakg.asm"
+
+loukmus_song
+    include "loukmus.asm"
+
+;; ASSERT evaluates immediately, so this has to come after the generated
+;; sprite sizes exist.
+    ASSERT SPR_ROBOT_W*SPR_ROBOT_H <= ENEMY_BUF
+    ASSERT SPR_CANARY_W*SPR_CANARY_H <= ENEMY_BUF
+    ASSERT SPR_DOG_W*SPR_DOG_H <= ENEMY_BUF
+    ASSERT SPR_MOP_W*SPR_MOP_H <= ENEMY_BUF
+    ASSERT SPR_STRAY_W*SPR_STRAY_H <= ENEMY_BUF
+    ASSERT SPR_BAT_W*SPR_BAT_H <= ENEMY_BUF
+    ASSERT SPR_BALL_W*SPR_BALL_H <= ENEMY_BUF
+    ASSERT SPR_BLOB_W*SPR_BLOB_H <= ENEMY_BUF
+    ASSERT SPR_PLANE_W*SPR_PLANE_H <= ENEMY_BUF
+    ASSERT SPR_PIGEON_W*SPR_PIGEON_H <= ENEMY_BUF
+    ASSERT SPR_WASP_W*SPR_WASP_H <= ENEMY_BUF
+    ASSERT SPR_SYRINGE_W*SPR_SYRINGE_H <= ENEMY_BUF
+
+code_end
+
+;; line_tab is 544 bytes built at startup, and every byte declared in the
+;; #4000 block costs the disc file one whether it is ever written from the
+;; file or not. Low RAM does not, so it goes there, just under the pickups'
+;; buffers - which is the same trick and for the same reason. See PICK_BUFS.
+LINE_TAB_AT EQU PICK_BUFS-DISPLAY_LINES*2
+
+    include "workspace.asm"
+
+;; ---------------------------------------------------------------------------
+;; The cat's own workspace: sized from the sprite data, so it cannot live in
+;; the shared engine workspace.
+;; ---------------------------------------------------------------------------
+cat_x       defs 1              ; column, in bytes
+cat_yf      defs 1              ; 8.8 fixed point: cat_yf then cat_y, so
+cat_y       defs 1              ; "ld hl,(cat_yf)" loads the pair
+cat_vy      defs 2              ; vertical velocity, same units, signed
+cat_state   defs 1              ; ST_GROUND / ST_AIR / ST_FLOP / ST_ROLL
+cat_stun    defs 1              ; frames left flat after a belly-flop
+cat_w       defs 1              ; current sprite size
+cat_h       defs 1
+cat_moved   defs 1              ; did it move horizontally this frame?
+cat_ofeet   defs 1              ; feet before and after the vertical step
+cat_nfeet   defs 1
+shake_timer defs 1
+cat_ox      defs 1              ; where the saved background came from
+cat_oy      defs 1
+cat_ow      defs 1
+cat_oh      defs 1
+cat_spr     defs 2              ; sprite for this frame
+cat_drawn   defs 1              ; is there a background to put back?
+cat_anim    defs 1
+cat_buf     defs SPR_MAX_BYTES
+cat_startx  defs 1                  ; where this room puts the cat
+cat_starty  defs 1
+
+;; rooms.asm - whichever room is loaded
+cur_room    defs 1
+room_name   defs 1                  ; message id for the HUD
+cur_plat    defs 2
+cur_saus    defs 2
+cur_nsaus   defs 1
+cur_props   defs 2
+exit_x      defs 1
+exit_y      defs 1
+exit_w      defs 1
+exit_h      defs 1
+exit_shut   defs 1                  ; prop ids for the two states
+exit_open   defs 1
+exit_px     defs 1                  ; where the exit prop is drawn
+exit_py     defs 1
+prop_x      defs 1                  ; origin of the prop being drawn
+prop_y      defs 1
+dec_w       defs 1                  ; width of the decal being painted
+room_pal    defs 1                  ; hardware colour of pen 0 in this room
+room_floor  defs 1                  ; and the pen its floor is made of
+box_top     defs 1                  ; the box draw_boxes is filling
+box_high    defs 1
+box_over    defs 1                  ; did its top run off the bottom?
+
+;; play.asm - score and larder
+score         defs SCORE_BYTES      ; packed BCD, most significant byte first
+sausages_got  defs 1
+sausage_alive defs SAUSAGE_MAX
+saus_x        defs 1                ; the sausage being tested
+saus_y        defs 1
+pick_bufp     defs 2                ; which sausage's saved background
+milk_x        defs 1                ; the saucer, if this room has one
+milk_y        defs 1
+milk_alive    defs 1
+milk_flash    defs 1                ; frames of border left to flash
+hud_dirty     defs 1
+level_done    defs 1                ; every sausage in this room found
+game_over     defs 1                ; out of lives, or the fridge is open
+cat_lives     defs 1
+cat_invul     defs 1                ; frames of grace after a respawn
+;; What the difficulty setting actually moves. Three bytes, in this order,
+;; because difficulty_apply copies the whole record over them in one go.
+walk_period   defs 1                ; updates between a walker's steps
+fly_period    defs 1                ; and between a flyer's
+stun_time     defs 1                ; how long a flattened enemy stays down
+start_lives   defs 1                ; and how many lives he gets to lose
+difficulty    defs 1                ; 0 easy, 1 medium, 2 hard
+
+rect_a        defs 4                ; x1, x2, y1, y2 - the ground the cat's
+rect_b        defs 4                ; picture covers, and an enemy's
+box_x         defs 1                ; the box cat_hits_box is testing against
+box_y         defs 1
+box_w         defs 1
+box_h         defs 1
+
+;; enemy.asm
+enemies       defs ENEMY_COUNT*E_SIZE
+enemy_bufs    defs ENEMY_COUNT*ENEMY_BUF
+e_bufp        defs 2                ; buffer cursor while walking the array
+
+;; The order the sprites are laid down in, worked out fresh every frame from
+;; where they are on screen. See sprites_order in play.asm.
+SPRITE_MAX    EQU ENEMY_COUNT+1
+ord_n         defs 1
+ord_y         defs SPRITE_MAX
+ord_id        defs SPRITE_MAX       ; what sprites_order worked out, which is
+                                    ; not yet what is on the screen
+draw_order    defs SPRITE_MAX       ; ids: 0 is the cat, an enemy is index+1
+draw_n        defs 1                ; how many of them were drawn last frame
+
+;; The real end of everything at #4000: workspace.asm's label only marks the
+;; end of the engine's own variables, and the game's are declared after it.
+game_end
+
+;; The workspace is uninitialised RAM, but it is still addresses: it must stop
+;; before the file's copy of the low block, or it would be built on top of the
+;; tables before they are moved down.
+    ASSERT DATA_LEN == TABLE_RAW_LEN   ; the packed copy is of these tables
+    ASSERT DATA_ORG+DATA_LEN <= LINE_TAB_AT
+    ASSERT PICK_BUFS+(SAUSAGE_MAX+1)*PICK_BUF <= #4000
+    ASSERT game_end <= PIC_STORE
+    ASSERT PIC_STORE+TITLE_PACKED_LEN <= DATA_STORE
+    ASSERT DATA_ORG+DATA_LEN <= #4000
+
+;; What the file has to hold: the code, the gap the workspace will use, and
+;; the low block riding along at the end of it.
+IMAGE_LEN       EQU DATA_STORE+TABLE_PACKED_LEN-loukoumas_start
+
+;; AMSDOS keeps its own buffers from #A67B up, which is why HIMEM drops when a
+;; disc drive is attached. The file may run over the screen at #8000 - nothing
+;; has looked at the screen yet when it is loaded - but not over those.
+    ;; ASSERT loukoumas_start+IMAGE_LEN <= #A67B
+
+    IF TARGET==1
+RUN loukoumas_start
+    ENDIF
+
+;; The raw binary the tools read. It has to be an explicit SAVE and not -ob,
+;; because the low block above is assembled at #0100 and -ob would write the
+;; sixteen kilobytes of nothing in between. The Makefile renames it.
+    IF TARGET==3
+    SAVE "build/out.bin",loukoumas_start,IMAGE_LEN
+    ENDIF
+
+    IF TARGET==2
+      IF LANG==0
+    SAVE "LOUK.BIN",loukoumas_start,IMAGE_LEN,DSK,"build/loukoumas_en.dsk"
+      ENDIF
+      IF LANG==1
+    SAVE "LOUK.BIN",loukoumas_start,IMAGE_LEN,DSK,"build/loukoumas_el.dsk"
+      ENDIF
+    ENDIF

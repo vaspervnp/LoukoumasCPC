@@ -1,0 +1,332 @@
+# ΛΟΥΚΟΥΜΑΣ / LOUKOUMAS
+
+**The Great Sausage Chase** - twenty-nine rooms for the **Amstrad CPC 6128**, in Greek
+and English, on a full overscan screen with no border anywhere.
+
+<img src="docs/cover-en.png" width="300" align="right" alt="the disc inlay">
+
+Loukoumas is an overweight cat on a diet. At a quarter past three in the morning he
+climbs from the basement to the kitchen to open the big two-door Pitsos, and finds it
+empty - the last sausage went to school in a lunchbox - so a raid on the fridge becomes
+a chase through the neighbourhood, six rooms of school, the vet's and home over the
+rooftops. A robot vacuum patrols the flat all night and the canary has the run of it.
+
+The whole screen is picture: **96 bytes by 272 scanlines, 26,112 bytes**, which is half
+of a 128K machine, and the other half is the game. There is no border to lose the edge
+of a room in, no double buffer to hide the rebuild behind, and no second copy of
+anything - which is what most of the decisions below are about.
+
+```bash
+make            # the snapshots and the disc images
+make check      # and the proof that they still work
+```
+
+| Target | Output | How to run it |
+|--------|--------|---------------|
+| `make loukoumas` | `build/loukoumas_en.sna`, `build/loukoumas_el.sna` | drop it on an emulator |
+| | `build/loukoumas_en.dsk`, `build/loukoumas_el.dsk` | insert the disc, then `RUN"LOUK` |
+| `make assets` | the font, strings, sprites and title picture | only needed when the art or the text changes |
+| `make shots` | every screen shot in `docs/`, both languages | |
+| `make covers manuals` | the disc inlay and the A5 booklet, both languages | |
+| `make check` | nothing | runs the lot on a Z80 interpreter and an emulated 6128 |
+
+Building needs [rasm](https://github.com/EdouardBERGE/rasm) on your PATH, and nothing
+else: everything a Python tool generates is committed. `iDSK` puts the loader and the
+loading screen on the disc images, and `python3` with Pillow and fpdf2 is what
+regenerates the art, the shots, the inlay and the booklet.
+
+<br clear="right">
+
+## The screen
+
+A stock CPC display is a firmware convention, not a hardware limit - 40 characters by 25
+rows in one 16K page, surrounded by border. The CRTC 6845 will show far more than that,
+and this shows as much as a CTM monitor will take:
+
+- 48x34 CRTC characters - 96 bytes by 272 scanlines, 26,112 bytes of video RAM.
+- A 32 KB screen spanning `#8000-#FFFF`, with **no rupture**: the display start address
+  is set to `#2C10` so that MA rolls from `#2FFF` to `#3000` after exactly 21 character
+  rows, flipping MA12 and carrying the fetch from page 2 into page 3 on a row boundary.
+  That sidesteps the 1024-character wrap described in CLAUDE.md section 2, and it is why
+  the picture looks the same on every CRTC type Amstrad shipped.
+- No firmware: ROMs off, own IM 1 handler, own stack.
+- The frame stays 312 lines at 50 Hz - overscan grows the window, not the frame.
+
+[CLAUDE.md](CLAUDE.md) is the hardware groundwork all of that sits on: the address
+decoding, the interrupt cadence, the CRTC types, and what is known to be true on real
+hardware rather than only in an emulator.
+
+## The documents
+
+
+| | English | Ελληνικά |
+|---|---|---|
+| **Player's manual** — loading, controls, what is chasing you | [MANUAL.en.md](MANUAL.en.md) | [MANUAL.el.md](MANUAL.el.md) |
+| **The same manual as the printed booklet** | [docs/manual-en.pdf](docs/manual-en.pdf) | [docs/manual-el.pdf](docs/manual-el.pdf) |
+| **The game: story, design and how it is built** | [loukoumas.en.md](loukoumas.en.md) | [loukoumas.md](loukoumas.md) |
+| **Disc inlay** — back, spine and front | [docs/cover-en.png](docs/cover-en.png) | [docs/cover-el.png](docs/cover-el.png) |
+| **Just the front of it** | [docs/cover-en-front.png](docs/cover-en-front.png) | [docs/cover-el-front.png](docs/cover-el-front.png) |
+
+The inlay is drawn by `tools/mkcover.py` out of the title artwork and the screen shots,
+in the sixteen pens the game itself uses: one 208x128 mm wrap for a 3" disc case, back
+panel, 9 mm spine and front panel in a row, with fold marks. `tools/mkmanual.py` sets
+the A5 booklet from the same markdown anybody reads above, so there is no second copy of
+the text to keep in step. Like everything else here both are generated rather than drawn
+once and lost:
+
+```bash
+make covers manuals
+```
+
+<br clear="right">
+
+Twenty-nine rooms in three acts: the flat at a quarter past three in the morning, the neighbourhood and the
+school in daylight, and the vet's and the rooftops home. Title screen, in Greek and
+English - one picture, and the name drawn over it in whichever language you are in:
+
+![Greek title screen](docs/loukoumas-title-el.png)
+![English title screen](docs/loukoumas-title-en.png)
+
+FIRE starts the game, Escape comes back, L switches language. Cursor keys or joystick to
+walk, FIRE or up to jump, down to roll, down plus FIRE in mid-air to belly-flop. Clear a
+room's sausages and the way out opens — the vent at the top of the bookshelf, then the
+Pitsos itself:
+
+![the lounge](docs/loukoumas-lounge-en.png)
+![the kitchen](docs/loukoumas-kitchen-en.png)
+![game over](docs/loukoumas-gameover-en.png)
+
+Then out of the flat, and the light changes with it:
+
+![the back yard](docs/loukoumas-backyard-en.png)
+![the park](docs/loukoumas-park-en.png)
+![the rooftops](docs/loukoumas-rooftops-en.png)
+
+Every one of those is taken by `make shots`, in both languages, off the same Z80
+interpreter `make check` reads the screen with: a build that starts in the room it wants,
+a scripted route to the frame worth keeping, and screen RAM decoded through the CRTC's
+addressing. They are the picture the hardware would put up rather than a photograph of an
+emulator window. The Greek set is what
+[the Greek manual](docs/manual-el.pdf) is made of.
+
+### Rooms
+
+Rooms are **composed, not painted**. A single 192x272 mode 0 background is 26 KB, so even
+two rooms of bitmap art would not fit, let alone a flat's worth. Each room in
+`src/rooms.asm` is a handful of tables — platforms, sausages, enemies, furniture, where
+the way out is — and costs a few dozen bytes plus whatever props it names. Props are
+shared between rooms, so the kitchen's window is the same bytes as the lounge's.
+
+Furniture is outlined in white rather than filled with it, which is also what makes a
+room readable: outlined means scenery, and anything the cat can stand on is pen 2 - the
+same butter yellow in all twenty-nine rooms, whatever the floor is made of. It is drawn
+once into the background, so a sprite walking over it restores it for free.
+
+Boxes are almost free, and a fridge is a box. A tree, a cloud, a slide and a street lamp
+are not, so those are **decals** — bitmaps drawn in Aseprite by `assets/aseprite/*.lua`,
+turned into Z80 data by `tools/mkart.py` and ORed into the background when the room
+loads. No mask: the screen underneath has just been cleared to pen 0, and ORing pen 0
+changes nothing, so a decal costs half what the same picture would as a sprite and costs
+nothing at all while the game is running.
+
+A room's light is one byte — the hardware colour of pen 0, which is the background and
+the border both. Navy is a wall at three in the morning, sky blue is nine o'clock outside
+a school, black is a roof at midnight. Nothing else in the palette moves, so the cat is
+butter yellow in all twenty-nine of them.
+
+`tools/roomcheck.py` walks the tables out of the assembled binary and refuses a room the
+cat cannot climb: a shelf out of jump range, a sausage hanging in mid-air, a saucer of
+milk that cannot be reached, an enemy patrolling off the edge of a platform. It caught a
+kitchen whose worktop was seventy-two scanlines above a thirty-nine scanline jump.
+
+Nothing in `play.asm` knows the flat's layout — it walks whatever tables `room_load`
+points it at, which is what lets a new room be added without touching the playing code.
+
+```bash
+make loukoumas
+```
+
+### The title screen
+
+A picture of the whole overscan window is 96 bytes by 272 scanlines: **26,112 bytes**,
+and there is nowhere in a 128K machine to keep that once the screen has taken 32 KB and
+the game has taken its sixteen. `tools/mkscreen.py` quantises any image to the sixteen
+pens, writes it raw as `build/title.bin` — 96 bytes a line, top to bottom, the plain form
+anything can load into an overscan screen — and packs it with LZSS to about seven
+kilobytes for the binary.
+
+`src/unpack.asm` unpacks it straight onto the screen, and it keeps **no window**. A back
+reference is at most 2047 bytes, which is at most twenty-two rows up, and `line_tab`
+already knows where every row is: the screen is its own window, so a match is two cursors
+walking the picture one behind the other. Eleven bytes of state, no buffer.
+
+The name goes on top of it, not instead of it. `txt_big_solid` writes the pen where the
+letter is and skips where it is not, so the title is drawn twice — black one byte right
+and two scanlines down, then yellow — and lands on the wall with a shadow rather than in
+a box.
+
+```bash
+make assets     # rebuild build/title.bin and src/titlepic.asm from the artwork
+```
+
+Both languages are in the same binary. Every line of text goes through a message id, and
+`tools/mktext.py` builds one string table per language from UTF-8 files you can edit
+directly:
+
+```
+text/loukoumas.el.txt     TITLE2 = ΤΟ ΚΥΝΗΓΙ ΤΟΥ ΛΟΥΚΑΝΙΚΟΥ
+text/loukoumas.en.txt     TITLE2 = THE GREAT SAUSAGE CHASE
+```
+
+Greek is folded onto the font rather than doubling it: accents are dropped (all-caps
+Greek is written unaccented), lowercase is raised, and the fourteen Greek capitals drawn
+the same as a Latin letter — Α Β Ε Ζ Η Ι Κ Μ Ν Ο Ρ Τ Υ Χ — reuse the Latin glyph. That
+leaves ten Greek-only shapes to draw, so the bilingual font is 54 glyphs, not 80. A
+character with no glyph is a build error naming the string it came from.
+
+`LANG=0/1` only picks which table `txt_lang` starts on. **L switches language while it
+runs** — only the text rows are repainted, so the change is immediate rather than a
+rebuild of the whole 26 KB screen.
+
+### Sprites
+
+There is no double buffer — a second 32 KB overscan screen plus code does not fit
+comfortably in 128 KB, and repainting 26 KB of background every frame is out of the
+question. So each sprite keeps the patch of background it covered, puts it back before
+it moves, and takes a fresh copy at the new position. Static scenery underneath survives
+being walked over for free, because it was part of what got saved — `make check` asserts
+exactly that, by walking the cat over a sausage and requiring all three to still be there.
+
+Drawing is `screen = (screen AND mask) OR data`, with mask and data interleaved so both
+come off one advancing pointer. `tools/mksprite.py` builds that from ASCII art in
+`assets/sprites.txt`, one character per pixel.
+
+Sprites are byte aligned, so they step 4 pixels at a time horizontally and one scanline
+vertically. Pixel-exact horizontal movement needs four pre-shifted copies of every frame;
+that is worth doing when it looks wrong, not before. Every routine walks `line_tab`, so
+the 2048-byte scanline stride and the jump from page 2 to page 3 at row 21 cost nothing.
+
+### Physics
+
+Vertical position is 8.8 fixed point — a byte of scanline and a byte of fraction, with
+velocity in the same units. Whole-pixel gravity at 50 Hz either falls like a brick or
+floats, and neither suits a cat the design document insists is overweight. Gravity is
+0.25 px/frame, the jump leaves at 4.5 and clears about 40 pixels, and the shelves are 32
+apart so each is reachable from the one below.
+
+Platforms are one-way: you land on them coming down and pass through going up. That is
+what a single-screen platform puzzle wants and it costs one comparison rather than a
+swept-box intersection.
+
+Rolling makes the cat shorter as well as faster, which is the point — 16 scanlines
+instead of 24 fits under things the standing cat does not. Changing sprite height keeps
+the feet anchored, so curling up and standing back up neither sinks nor hops.
+
+The belly-flop drops at terminal velocity, lands flat, stuns for 14 frames and shakes the
+room. The shake moves **R7**, the VSYNC position, which slides the whole picture against
+the monitor without touching a byte of screen memory. Shifting `R12`/`R13` would have been
+the obvious trick and is wrong here: the screen base is chosen so the page 2 to page 3
+crossing lands exactly on a character row, and moving it scrambles the row where the
+pages meet. R7 can only go up from 34 — below `R6` the VSYNC would start inside the
+display.
+
+`make check` asserts the numbers frame by frame: the jump apex, the landing on the shelf,
+the flop's terminal velocity and the shake and stun it sets.
+
+### Enemies
+
+There are two behaviours - something that patrols a platform and something that crosses
+the room on a sine, from a 32-entry table of unsigned offsets so nothing has to be
+signed - and twelve creatures driven by them, because a robot vacuum patrolling a park
+bench is not a joke that survives nineteen rooms. `src/enemykind.asm` maps a type byte to
+a picture and one of the two behaviours, so a new creature costs three bytes and its art.
+Touching any of them costs a life; the cat respawns with two seconds of grace.
+
+The belly-flop is the answer to a robot that patrols a whole shelf. Landing on your belly
+stuns everything at roughly the height you landed at, however far along the shelf it is —
+the whole floor shook, not a patch of it — and a stunned enemy stops dead and is
+harmless. `make check` asserts exactly that: the flop freezes the shelf robot, the cat
+walks straight through it to take the sausage it was guarding, and loses no lives.
+
+Now that more than one thing moves, ordering matters: everything is erased in the exact
+reverse of the order it was drawn, so a sprite never restores background another sprite
+has since been drawn into. The cat is drawn last and erased first, which is also what
+puts it on top.
+
+`make check` runs a **clean run of the lounge with the enemies in place**: all five
+sausages, no lives lost, then out through the vent into the kitchen. It has to belly-flop
+to get past the robot patrolling shelf 2, so that mechanic is not decoration — the route
+does not survive without it. This is the level design's own test as much as the code's:
+change a shelf, the jump height or a patrol and it stops passing. The kitchen is built
+but its route is not scripted.
+
+### Score and collection
+
+The score is packed BCD, most significant byte first, so `DAA` does the arithmetic and
+printing needs no division — six digits straight out of two nibbles a byte. Collection
+happens between erasing the cat and redrawing it, which is the only window where a
+sausage can leave the background without the cat's save buffer putting it back.
+
+### Timing and input
+
+The title screen runs on a real 50 Hz loop. The Gate Array interrupts every 52 scanlines,
+which is *six* times per frame, so `src/irq.asm` installs a handler at `#0038` (plain RAM
+once the ROMs are off) and bumps a frame counter once per frame. It does not count to six
+to find the frame: VSYNC is eight scanlines and the interrupts are fifty-two apart, so
+exactly one of the six falls inside VSYNC, and the handler reads PPI port B and takes that
+one as the top of the frame. Counting is the fallback. Getting that wrong does not show up
+in a debugger - the game still runs at 50 Hz - it just puts every frame's work at an
+arbitrary offset into the picture, and the sprite work is half a frame long. The
+"press fire" line blinks off that counter — driving anything straight from `HALT` would
+run it six times too fast. `src/keys.asm` reads the key matrix through the PPI and the
+AY-3-8912, and reports both held keys and the ones that went down this frame.
+
+## Tools
+
+`tools/z80check.py` runs the assembled code on a small Z80 interpreter, watches the CRTC
+and Gate Array writes it makes, and decodes screen RAM through the CPC's real MA/RA
+address wiring. It is how the picture above was produced, and how a screen layout gets
+checked without an emulator:
+
+```bash
+make check
+```
+
+Add `--png out.png` for an image instead of the terminal preview (needs Pillow),
+`--frames N` to run a game loop for a while instead of stopping at a self-jump, and
+`--keys` to press keys on a schedule — `L` for the whole run, `FIRE@12-13` for those
+frames only, `RIGHT@15` from there on. With `--sym` (rasm's symbol file) and `--watch
+cat_y,cat_vy:s` it prints named variables once per virtual frame, which is how the
+physics above is checked. It models IM 1 interrupts six to the
+frame, the VSYNC bit on PPI port B, and the key matrix through the PPI, which is enough
+to prove a main loop turns over and reacts to input. `make check` uses that to assert the
+Greek build comes out in English when L is held.
+
+It charges every instruction the CPC's own microseconds — one per machine cycle, plus a
+table for the rest — so a virtual frame is 19,968 us and not a number of instructions.
+That is what makes `--beam` possible: it pairs each sprite's erase with its redraw and
+says where the beam was while the sprite was off the screen, which is the only way to
+measure flicker without a camera. `--debris` takes the room as drawn for a reference and
+counts ink left standing on ground the room painted empty, which is what a piece of a
+sprite stamped into the background looks like. Both are budgeted in `make check`.
+
+No ROMs and no banking, and the picture is one static frame taken at the end of the run —
+rupture and raster splits are invisible to it. It aborts on any opcode it does not
+implement rather than guessing. For the things a model cannot answer there is
+`tools/emucheck.py`, which boots floooh/chips' 6128 with the real ROMs, types `RUN"LOUK`
+at the disc image and asks the machine what came out.
+
+## Layout
+
+```
+src/        Z80 sources (rasm)
+tools/      host-side helpers
+build/      assembled binaries and .dsk images (not in git)
+docs/       notes, register tables, measurements from real hardware
+```
+
+## Testing
+
+CRTC behaviour is where emulators disagree most, so anything here is checked on more
+than one: **ACE-DL**, **CPCEC** and **WinAPE** are the accurate references, with real
+6128 hardware as the final word. Emulator CRTC type must be set explicitly for every test.
