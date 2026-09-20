@@ -584,6 +584,7 @@ milk_alive    defs 1
 milk_flash    defs 1                ; frames of border left to flash
 hud_dirty     defs 1
 level_done    defs 1                ; every sausage in this room found
+exit_pending  defs 1                ; and the way out not yet painted open
 game_over     defs 1                ; out of lives, or the fridge is open
 cat_lives     defs 1
 cat_invul     defs 1                ; frames of grace after a respawn

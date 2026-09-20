@@ -155,6 +155,10 @@ play_step
     djnz play_step
 
     call update_hud             ; above the play area, so it is never in the way
+    call enemies_tangled        ; and who is standing in whom, now that the
+                                ; cast has finished moving: it is the picture
+                                ; about to be drawn that the question is about,
+                                ; so once here beats twice inside the loop
     call sprites_order          ; who is where, before the clock starts running
     jr play_over
 
@@ -276,6 +280,7 @@ room_load_found
     ld (cat_anim),a
     ld (cat_invul),a
     ld (level_done),a
+    ld (exit_pending),a
     ld (sausages_got),a
     ld (shake_timer),a
     ld (hud_dirty),a
@@ -935,7 +940,15 @@ check_sausages_next
     ret nz
     ld a,1
     ld (level_done),a
-    jp draw_exit                ; the way out opens
+    ;; The way out opens, and that is a change to the background like any
+    ;; other: it cannot be painted here, with the whole cast standing on the
+    ;; screen. Anything whose saved background holds a piece of the shut door
+    ;; hands that piece back the next time it moves, and the door is shut
+    ;; again in the middle of the open one - which is what an enemy walking
+    ;; past the door on the frame the last sausage went did. So it is noted,
+    ;; and painted in the one moment nothing is on the screen at all.
+    ld (exit_pending),a
+    jp sprites_touched          ; which is the frame that gives us that moment
 
 ;; ---------------------------------------------------------------------------
 ;; check_milk - a life back, up to five, and nothing else changes: the milk
@@ -1908,6 +1921,9 @@ sprites_resync
     dec a
     ld (sprites_dirty),a
     call sprites_erase          ; over draw_order, which is still last frame's
+    call exit_repaint           ; and now nothing is on the screen, which is
+                                ; the only moment the background may change
+                                ; under all of them rather than under the cat
     xor a
     ld (cat_drawn),a            ; nothing is on the screen, so nothing has to
     ld iy,enemies               ; come off it before it goes back on
@@ -1918,6 +1934,18 @@ sprites_resync_loop
     add iy,de
     djnz sprites_resync_loop
     ret
+
+;; ---------------------------------------------------------------------------
+;; exit_repaint - the way out, once the last sausage is found. Deferred out of
+;; check_sausages to here, where the room is bare: see the note there.
+;; ---------------------------------------------------------------------------
+exit_repaint
+    ld a,(exit_pending)
+    or a
+    ret z
+    xor a
+    ld (exit_pending),a
+    jp draw_exit
 
 ;; ---------------------------------------------------------------------------
 ;; Whether two sprites are about to stand in each other, which is the one
@@ -1965,6 +1993,32 @@ cat_rect_keep
     ret
 
 ;; ---------------------------------------------------------------------------
+;; enemy_rect - IY = an enemy -> rect_b = every byte of ground its picture
+;; covers: where it is about to be drawn, and where it is still standing.
+;; Destroys AF, BC, DE, HL.
+;; ---------------------------------------------------------------------------
+enemy_rect
+    call enemy_sprite           ; the picture it is about to be drawn in
+    ld b,(iy+E_X)
+    ld a,(hl)
+    add a,b
+    ld c,a
+    inc hl
+    ld d,(iy+E_Y)
+    ld a,(hl)
+    add a,d
+    ld e,a
+    call rect_set
+    ld a,(iy+E_DRAWN)
+    or a
+    ret z
+    push iy                     ; and the ground its picture is still standing
+    pop hl                      ; on, which is the half that leaves the mess
+    ld bc,E_OX
+    add hl,bc
+    jp rect_widen
+
+;; ---------------------------------------------------------------------------
 ;; enemy_tangled - IY = an enemy. Flag the pair if its picture and the cat's
 ;; are going to stand in each other. cat_rect must have run this frame.
 ;; Destroys AF, BC, DE, HL.
@@ -1985,31 +2039,84 @@ enemy_tangled
     cp (hl)
     ret z
 enemy_tangled_move
-    call enemy_sprite           ; the picture it is about to be drawn in
-    ld b,(iy+E_X)
-    ld a,(hl)
-    add a,b
-    ld c,a
-    inc hl
-    ld d,(iy+E_Y)
-    ld a,(hl)
-    add a,d
-    ld e,a
-    call rect_set
-    ld a,(iy+E_DRAWN)
-    or a
-    jr z,enemy_tangled_test
-    push iy                     ; and the ground its picture is still standing
-    pop hl                      ; on, which is the half that leaves the mess
-    ld bc,E_OX
-    add hl,bc
-    call rect_widen
-enemy_tangled_test
+    call enemy_rect
     call rect_hits
     ret nc
+    ;; fall through
+
+;; ---------------------------------------------------------------------------
+;; sprites_touched - two pictures are about to be saved into each other, so
+;; the next frame is unwound whole instead of one sprite at a time.
+;; ---------------------------------------------------------------------------
+sprites_touched
     ld a,2                      ; two frames, not one: what a buffer holds is
     ld (sprites_dirty),a        ; a frame behind, so the frame after the last
     ret                         ; one either of them moved is still tangled
+
+;; ---------------------------------------------------------------------------
+;; enemies_tangled - the same question again, and this time the cat is not in
+;; it: one enemy against another.
+;;
+;; The cat is not the only pair on the screen. A canary at the bottom of its
+;; arc crosses the shelf the robot vacuum patrols, and whichever of the two
+;; is rebuilt second saves the other into its background and hands that piece
+;; back a frame later - by which time the thing it was a picture of has moved
+;; on, and a wing is left standing on the shelf for good. It is the cat
+;; dying on a robot all over again, with neither of them the cat.
+;;
+;; Three enemies is three pairs, and a pair where neither is going to be
+;; lifted off at all cannot leave anything: each hands the other back exactly
+;; where it still is. It runs after the picture is on the screen, where the
+;; microseconds are the ones nothing is waiting for.
+;; Destroys AF, BC, DE, HL, IY.
+;; ---------------------------------------------------------------------------
+enemies_tangled
+    ld iy,enemies
+    ld b,ENEMY_COUNT-1          ; the last one has nobody after it
+enemies_tangled_outer
+    push bc
+    ld a,(iy+E_TYPE)
+    or a
+    jr z,enemies_tangled_next
+    call enemy_moved
+    ld c,0                      ; C rides through the inner loop: is this one
+    jr z,enemies_tangled_rect   ; going to be lifted off and put back at all?
+    inc c
+enemies_tangled_rect
+    push bc
+    call enemy_rect
+    ld hl,rect_b                ; rect_b is where the other one's is built, so
+    ld de,rect_a                ; this one's has to move out of the way
+    ld bc,4
+    ldir
+    pop bc                      ; B is also how many of them follow this one
+    push iy
+enemies_tangled_inner
+    ld de,E_SIZE
+    add iy,de
+    push bc
+    ld a,(iy+E_TYPE)
+    or a
+    jr z,enemies_tangled_inner_next
+    call enemy_moved
+    jr nz,enemies_tangled_test
+    ld a,c
+    or a
+    jr z,enemies_tangled_inner_next
+enemies_tangled_test
+    call enemy_rect
+    call rect_hits
+    call c,sprites_touched
+enemies_tangled_inner_next
+    pop bc
+    djnz enemies_tangled_inner
+    pop iy
+enemies_tangled_next
+    ld de,E_SIZE
+    add iy,de
+    pop bc
+    djnz enemies_tangled_outer
+    ret
 
 ;; ---------------------------------------------------------------------------
 ;; rect_set - B,C,D,E = x1, x2, y1, y2 -> rect_b.

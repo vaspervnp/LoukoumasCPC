@@ -277,6 +277,10 @@ enemy_stun_dy
 ;; different question from whether the robot is a threat. A stunned one costs
 ;; no life and still has to be untangled - the cat walking through a robot it
 ;; has just flattened is the commonest overlap in the game.
+;;
+;; The pairs the cat is not in are enemies_tangled's, and it is called from
+;; the loop rather than from here - once the cast has finished moving, not
+;; twice inside it.
 ;; ---------------------------------------------------------------------------
 enemies_hit_cat
     call cat_rect               ; once: it is the same cat for all of them

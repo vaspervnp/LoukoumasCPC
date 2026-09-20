@@ -322,6 +322,16 @@ The game ships in Greek and English. The rules that keeps that from rotting:
   still is, and a frame that finds anything is unwound whole and laid down
   again instead. `tools/z80check.py --debris` counts what is left standing on
   ground the room painted empty, and `make check` fails on one byte of it.
+- **The question has to be asked of every pair, not only of the cat's.** Four
+  sprites make six pairs and the cat is in three of them; the other three were
+  never asked. A canary at the bottom of its arc crosses the shelf a robot
+  vacuum patrols, and a wing stayed on the shelf after it had gone. That is
+  `enemies_tangled`, and it runs once a picture - after the cast has finished
+  moving, because the rectangle it wants is where each of them is *about to be
+  drawn* against where its picture still is, and an intermediate position
+  inside a logic step is never drawn at all. Room 6, the inside of the
+  wardrobe, is the one room in the flat where those two bands meet, which is
+  what `build/loukoumas_wardrobe.bin` in `make check` is for.
 - `tools/z80check.py --profile` counts instructions per routine and is how all of the
   above was found rather than guessed. Its virtual frame is a fixed instruction budget,
   so when the game stops overrunning it the scripted routes shift and have to be
@@ -453,7 +463,7 @@ The game ships in Greek and English. The rules that keeps that from rotting:
   an effect that stops being stepped never reaches its last frame, which is the
   frame that shuts the channel up. The death effect held its note for ever.
 - There is no music. Three channels and a tracker replay is a different job and
-  there are about ninety bytes left between `game_end` and `PIC_STORE`.
+  there are about two hundred bytes left between `game_end` and `PIC_STORE`.
 
 ## 11. Game state
 
@@ -462,6 +472,15 @@ The game ships in Greek and English. The rules that keeps that from rotting:
 - Anything that changes the background - collecting a sausage, say - must happen between
   the sprite erase and the sprite draw. Outside that window the cat's save buffer either
   restores what you removed or captures what you added.
+- **That window is the cat's, and it is only wide enough for a change under the cat.**
+  A sausage is eaten where the cat is standing, so the gap between `cat_erase` and
+  `cat_draw` covers it. The way out opening does not: it happens the moment the last
+  sausage goes, wherever the door is, and whoever is standing in front of it is holding
+  a piece of the *shut* door in its saved background and hands it back a frame later.
+  So `check_sausages` only notes it - `exit_pending` - and calls `sprites_touched`; the
+  repaint is done by `exit_repaint`, inside the resync, in the one moment of the frame
+  when nothing at all is on the screen. Any future change to the background outside the
+  cat's own footprint belongs there too.
 - The HUD only repaints when something changed. Its captions come from the string table,
   so column positions have to leave room for the longer language.
 - Once more than one thing moves, erase in the exact reverse of the draw order.

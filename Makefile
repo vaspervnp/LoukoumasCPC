@@ -172,6 +172,15 @@ $(BUILD)/loukoumas_title.bin: $(DEPS) | $(BUILD)
 	$(RASM) src/loukoumas.asm -DTARGET=3 -DLANG=1
 	mv $(BUILD)/out.bin $@
 
+# Room 6 is the inside of the wardrobe, and the only room in the flat where
+# the canary's arc reaches the shelf a robot vacuum patrols: the two of them
+# stand in each other without the cat being anywhere near, which is the one
+# overlap a cat-shaped test cannot see.
+$(BUILD)/loukoumas_wardrobe.bin: $(DEPS) | $(BUILD)
+	$(RASM) src/loukoumas.asm -DTARGET=3 -DTITLEPIC=0 -DLANG=1 -DSTARTROOM=5 \
+		-s -sa -os $(BUILD)/loukoumas_wardrobe.sym
+	mv $(BUILD)/out.bin $@
+
 $(BUILD)/loukoumas_roof.bin: $(DEPS) | $(BUILD)
 	$(RASM) src/loukoumas.asm -DTARGET=3 -DTITLEPIC=0 -DLANG=1 -DSTARTROOM=27 \
 		-s -sa -os $(BUILD)/loukoumas_roof.sym
@@ -188,7 +197,7 @@ $(BUILD)/loukoumas_roof.bin: $(DEPS) | $(BUILD)
 check: all $(BUILD)/loukoumas_en.bin $(BUILD)/loukoumas_el.bin \
        $(BUILD)/loukoumas_lounge.bin $(BUILD)/loukoumas_yard.bin \
        $(BUILD)/loukoumas_roof.bin $(BUILD)/loukoumas_title.bin \
-       $(BUILD)/title.bin
+       $(BUILD)/loukoumas_wardrobe.bin $(BUILD)/title.bin
 	@echo "=== every room climbable, every sausage and every saucer reachable ==="
 	@./tools/roomcheck.py $(BUILD)/loukoumas_el.bin $(BUILD)/loukoumas_el.sym \
 		$(BUILD)/tables.bin
@@ -217,8 +226,8 @@ check: all $(BUILD)/loukoumas_en.bin $(BUILD)/loukoumas_el.bin \
 		| grep -E "frame ( 67| 69| 73| 75)"
 	@echo "=== loukoumas, a robot costs a life and respawns the cat ==="
 	@echo "    118 walking into it at column 74, 119 back at the start with"
-	@echo "    a life gone and a hundred frames of grace. Three to begin with,"
-	@echo "    because the chooser was left on hard"
+	@echo "    a life gone and its hundred frames of grace already running."
+	@echo "    Three lives to lose, because the chooser was left on hard"
 	@./tools/z80check.py $(BUILD)/loukoumas_el.bin --frames 208 \
 		--keys "$(START),RIGHT@48-208" --sym $(BUILD)/loukoumas_el.sym \
 		--watch "cat_x,cat_lives,cat_invul" | grep -E "frame (118|119)"
@@ -243,9 +252,44 @@ check: all $(BUILD)/loukoumas_en.bin $(BUILD)/loukoumas_el.bin \
 	@echo "    leaves it in the room for good - which is what the cat dying on"
 	@echo "    a robot used to do. This walks it into one and counts the ink"
 	@echo "    left standing on ground the room painted empty."
+	@echo "    (--debris fails the build on one byte, which is why the output"
+	@echo "    goes through a file: a pipe would hand make tail's exit status.)"
 	@./tools/z80check.py $(BUILD)/loukoumas_el.bin --frames 268 \
 		--keys "$(START),RIGHT@48-268" --sym $(BUILD)/loukoumas_el.sym \
-		--debris | tail -1
+		--debris > $(BUILD)/debris.txt; \
+		s=$$?; tail -1 $(BUILD)/debris.txt; exit $$s
+	@echo "=== loukoumas, nor when the cat is not in it ==="
+	@echo "    the same thing happens between two enemies, and there the cat"
+	@echo "    is not there to notice it. Inside the wardrobe the canary comes"
+	@echo "    down through the shelf the robot vacuum patrols about once a"
+	@echo "    second. Nobody touches a key in this one: it is the two of them,"
+	@echo "    left to get on with it, and the cat standing where it started."
+	@echo "    The reference is taken at frame 60, not 30: a room paints itself"
+	@echo "    over several frames and the scan has to start after it, not in"
+	@echo "    the middle of it."
+	@./tools/z80check.py $(BUILD)/loukoumas_wardrobe.bin --frames 500 \
+		--keys "$(START)" --sym $(BUILD)/loukoumas_wardrobe.sym \
+		--debris --debris-from 60 > $(BUILD)/debris.txt; \
+		s=$$?; tail -1 $(BUILD)/debris.txt; exit $$s
+	@echo "=== loukoumas, and the way out opens even behind somebody ==="
+	@echo "    the door swinging open is a change to the background like any"
+	@echo "    other, so it cannot be painted with the cast standing on the"
+	@echo "    screen: whoever is in front of it is holding a piece of the shut"
+	@echo "    door in its saved background and hands it back a frame later."
+	@echo "    The last sausage is poked into reach on the frame the canary is"
+	@echo "    crossing the doorway and the vacuum is parked in it; two seconds"
+	@echo "    later both have moved on and the lit doorway has to be lit all"
+	@echo "    the way down - 13 bytes by 176 scanlines of pen 15, nothing else."
+	@./tools/z80check.py $(BUILD)/loukoumas_el.bin --frames 200 \
+		--keys "$(START),RIGHT@72-130" --sym $(BUILD)/loukoumas_el.sym \
+		--poke "sausages_got=4@100" --dump $(BUILD)/door.bin \
+		> $(BUILD)/door.txt; s=$$?; tail -1 $(BUILD)/door.txt; exit $$s
+	@$(PYTHON) -c "d = open('$(BUILD)/door.bin','rb').read(); \
+		bad = [(x, y) for y in range(60, 236) for x in range(77, 90) \
+		       if d[y*96+x] != 0xFF]; \
+		print('    %d bytes of the open doorway are still the shut door' % len(bad) \
+		      if bad else '    the doorway came out lit, 13 bytes by 176 scanlines'); \
+		exit(1 if bad else 0)"
 	@echo "=== loukoumas, clean run of the lounge and out through the vent ==="
 	@echo "    a sausage at 91, 149, 237, 295 and 367, the saucer of milk at"
 	@echo "    225 - which he has all nine lives for, so it is worth points"
