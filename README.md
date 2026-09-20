@@ -37,48 +37,7 @@ regenerates the art, the shots, the inlay and the booklet.
 
 <br clear="right">
 
-## The screen
-
-A stock CPC display is a firmware convention, not a hardware limit - 40 characters by 25
-rows in one 16K page, surrounded by border. The CRTC 6845 will show far more than that,
-and this shows as much as a CTM monitor will take:
-
-- 48x34 CRTC characters - 96 bytes by 272 scanlines, 26,112 bytes of video RAM.
-- A 32 KB screen spanning `#8000-#FFFF`, with **no rupture**: the display start address
-  is set to `#2C10` so that MA rolls from `#2FFF` to `#3000` after exactly 21 character
-  rows, flipping MA12 and carrying the fetch from page 2 into page 3 on a row boundary.
-  That sidesteps the 1024-character wrap described in CLAUDE.md section 2, and it is why
-  the picture looks the same on every CRTC type Amstrad shipped.
-- No firmware: ROMs off, own IM 1 handler, own stack.
-- The frame stays 312 lines at 50 Hz - overscan grows the window, not the frame.
-
-[CLAUDE.md](CLAUDE.md) is the hardware groundwork all of that sits on: the address
-decoding, the interrupt cadence, the CRTC types, and what is known to be true on real
-hardware rather than only in an emulator.
-
-## The documents
-
-
-| | English | Ελληνικά |
-|---|---|---|
-| **Player's manual** — loading, controls, what is chasing you | [MANUAL.en.md](MANUAL.en.md) | [MANUAL.el.md](MANUAL.el.md) |
-| **The same manual as the printed booklet** | [docs/manual-en.pdf](docs/manual-en.pdf) | [docs/manual-el.pdf](docs/manual-el.pdf) |
-| **The game: story, design and how it is built** | [loukoumas.en.md](loukoumas.en.md) | [loukoumas.md](loukoumas.md) |
-| **Disc inlay** — back, spine and front | [docs/cover-en.png](docs/cover-en.png) | [docs/cover-el.png](docs/cover-el.png) |
-| **Just the front of it** | [docs/cover-en-front.png](docs/cover-en-front.png) | [docs/cover-el-front.png](docs/cover-el-front.png) |
-
-The inlay is drawn by `tools/mkcover.py` out of the title artwork and the screen shots,
-in the sixteen pens the game itself uses: one 208x128 mm wrap for a 3" disc case, back
-panel, 9 mm spine and front panel in a row, with fold marks. `tools/mkmanual.py` sets
-the A5 booklet from the same markdown anybody reads above, so there is no second copy of
-the text to keep in step. Like everything else here both are generated rather than drawn
-once and lost:
-
-```bash
-make covers manuals
-```
-
-<br clear="right">
+## The game
 
 Twenty-nine rooms in three acts: the flat at a quarter past three in the morning, the neighbourhood and the
 school in daylight, and the vet's and the rooftops home. Title screen, in Greek and
@@ -108,6 +67,48 @@ a scripted route to the frame worth keeping, and screen RAM decoded through the 
 addressing. They are the picture the hardware would put up rather than a photograph of an
 emulator window. The Greek set is what
 [the Greek manual](docs/manual-el.pdf) is made of.
+
+## The screen
+
+A stock CPC display is a firmware convention, not a hardware limit - 40 characters by 25
+rows in one 16K page, surrounded by border. The CRTC 6845 will show far more than that,
+and this shows as much as a CTM monitor will take:
+
+- 48x34 CRTC characters - 96 bytes by 272 scanlines, 26,112 bytes of video RAM.
+- A 32 KB screen spanning `#8000-#FFFF`, with **no rupture**: the display start address
+  is set to `#2C10` so that MA rolls from `#2FFF` to `#3000` after exactly 21 character
+  rows, flipping MA12 and carrying the fetch from page 2 into page 3 on a row boundary.
+  That sidesteps the 1024-character wrap described in CLAUDE.md section 2, and it is why
+  the picture looks the same on every CRTC type Amstrad shipped.
+- No firmware: ROMs off, own IM 1 handler, own stack.
+- The frame stays 312 lines at 50 Hz - overscan grows the window, not the frame.
+
+[CLAUDE.md](CLAUDE.md) is the hardware groundwork all of that sits on: the address
+decoding, the interrupt cadence, the CRTC types, and what is known to be true on real
+hardware rather than only in an emulator.
+
+## The documents
+
+| | English | Ελληνικά |
+|---|---|---|
+| **Player's manual** — loading, controls, what is chasing you | [MANUAL.en.md](MANUAL.en.md) | [MANUAL.el.md](MANUAL.el.md) |
+| **The same manual as the printed booklet** | [docs/manual-en.pdf](docs/manual-en.pdf) | [docs/manual-el.pdf](docs/manual-el.pdf) |
+| **The game: story, design and how it is built** | [loukoumas.en.md](loukoumas.en.md) | [loukoumas.md](loukoumas.md) |
+| **Disc inlay** — back, spine and front | [docs/cover-en.png](docs/cover-en.png) | [docs/cover-el.png](docs/cover-el.png) |
+| **Just the front of it** | [docs/cover-en-front.png](docs/cover-en-front.png) | [docs/cover-el-front.png](docs/cover-el-front.png) |
+
+The inlay is drawn by `tools/mkcover.py` out of the title artwork and the screen shots,
+in the sixteen pens the game itself uses: one 208x128 mm wrap for a 3" disc case, back
+panel, 9 mm spine and front panel in a row, with fold marks. `tools/mkmanual.py` sets
+the A5 booklet from the same markdown anybody reads on the web, so there is no second copy of
+the text to keep in step. Like everything else here both are generated rather than drawn
+once and lost:
+
+```bash
+make covers manuals
+```
+
+## How it is built
 
 ### Rooms
 
