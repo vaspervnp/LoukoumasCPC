@@ -171,11 +171,11 @@ You do not have to find them in any order, and nothing comes back if you lose
 a life, so a room only ever gets easier.
 
 **THE SAUCER OF MILK — every third room.**
-Rooms 3, 6, 9, 12, 15, 18, 21, 24 and 27 have one, and it is **a life back** —
-but never more than the number you started the game on. If you have not lost
-one yet it is worth 500 points instead, so it is never wasted; it is worth a
-great deal more once you have started losing them, and on hard, where you only
-ever had three, it is worth more still.
+Rooms 3, 6, 9, 12, 15, 18, 21, 24 and 27 have one, and it is **a life** and
+500 points, on every difficulty, up to **nine lives**. On medium and hard that
+means it can take you past what you started with: drink every saucer on hard
+and three lives become six. On easy you start on nine, so it only gives back
+what you have lost. With nine already, it is the 500 points and nothing else.
 
 ![The Pitsos in the kitchen, open at last — and empty.](docs/loukoumas-kitchen-en.png)
 
@@ -240,7 +240,7 @@ the same place.
 | | |
 |---|---|
 | Sausage | 100 |
-| Saucer of milk | a life back — or 500 if you have not lost one yet |
+| Saucer of milk | 500, and a life if you have fewer than nine |
 
 There is no time bonus and no end-of-room bonus. The score is what you picked
 up.
@@ -271,9 +271,10 @@ considered generous.
   cannot walk around.
 * **The flop is a key, not a weapon.** Nothing in this game dies. A shelf you
   cannot cross is a shelf you have not flopped on yet.
-* **Take the milk when you are down a life or two.** Untouched it is only
-  points; one short, it is the way back up. It is on the hardest shelf in the
-  room either way, and you will not want to go back for it on your last one.
+* **On medium and hard, take every saucer.** Each one is a life you did not
+  start with, and lives are what the last rooms are paid for in. It is on the
+  hardest shelf in the room, and you will not want to go back for it on your
+  last one.
 * **Learn where the canary turns.** Everything that flies bounces between the
   same two walls for ever. Stand where it has just been.
 * **Rolling under something is usually faster than jumping over it**, and it is

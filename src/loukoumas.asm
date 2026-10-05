@@ -109,6 +109,9 @@ loukoumas_start
     ld (difficulty),a           ; so the chooser only ever makes it kinder
     call difficulty_apply
     xor a
+    ld (score),a                ; low RAM, so nothing in the file zeroed it
+    ld (score+1),a
+    ld (score+2),a
     ld (txt_solid),a            ; small text blends until the HUD asks for more
     ld (txt_big_solid),a        ; and big text blends until the title asks
     ld a,PEN1_BYTE
@@ -572,7 +575,7 @@ box_high    defs 1
 box_over    defs 1                  ; did its top run off the bottom?
 
 ;; play.asm - score and larder
-score         defs SCORE_BYTES      ; packed BCD, most significant byte first
+score         EQU SCORE_AT          ; packed BCD, most significant byte first
 sausages_got  defs 1
 sausage_alive defs SAUSAGE_MAX
 saus_x        defs 1                ; the sausage being tested
@@ -628,6 +631,8 @@ game_end
     ASSERT DATA_LEN == TABLE_RAW_LEN   ; the packed copy is of these tables
     ASSERT DATA_ORG+DATA_LEN <= LINE_TAB_AT
     ASSERT PICK_BUFS+(SAUSAGE_MAX+1)*PICK_BUF <= #4000
+    ASSERT SCORE_AT >= PICK_BUFS+(SAUSAGE_MAX+1)*PICK_BUF
+    ASSERT SCORE_AT+SCORE_BYTES <= #4000
     ASSERT game_end <= PIC_STORE
     ASSERT PIC_STORE+TITLE_PACKED_LEN <= DATA_STORE
     ASSERT DATA_ORG+DATA_LEN <= #4000

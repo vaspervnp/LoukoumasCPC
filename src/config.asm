@@ -167,7 +167,8 @@ PIC_STORE       EQU #6700
 
 ;; The HUD prints the lives with print_digit, one character, so ten would come
 ;; out as whatever follows 9 in the font. Every difficulty's starting count is
-;; checked against this where the table is.
+;; checked against this where the table is, and it is where the saucer of milk
+;; stops adding lives, on every difficulty.
 LIVES_CEILING   EQU 9
 
 ;; Where the pickups keep the background they are standing on. Low RAM, above
@@ -175,6 +176,13 @@ LIVES_CEILING   EQU 9
 ;; so unlike anything declared in the #4000 block it costs nothing at all in
 ;; the file. See draw_sausages.
 PICK_BUFS       EQU #3800
+
+;; The score, at an address that does not move when the code does, so that an
+;; emulator or a debugger can be pointed at it once and keep reading it: three
+;; bytes of packed BCD, most significant first. Low RAM for the same reason as
+;; PICK_BUFS - it costs the file nothing - and cleared at boot, since nothing
+;; loads it there.
+SCORE_AT        EQU #3F00
 
 ;; ---------------------------------------------------------------------------
 ;; Which room the game starts in. Always 0 in a build anyone plays; make check

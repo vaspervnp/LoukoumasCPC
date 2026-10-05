@@ -469,6 +469,10 @@ The game ships in Greek and English. The rules that keeps that from rotting:
 
 - Score is packed BCD, most significant byte first: `DAA` does the arithmetic and
   printing is two nibbles a byte, no division.
+- **The score lives at a fixed address, `SCORE_AT` (#3F00)**, in low RAM, so an
+  emulator or a debugger can watch it without chasing the symbol file. Keep it
+  there: people have pointed tools at it. It is zeroed at boot because nothing
+  in the file covers it.
 - Anything that changes the background - collecting a sausage, say - must happen between
   the sprite erase and the sprite draw. Outside that window the cat's save buffer either
   restores what you removed or captures what you added.
@@ -493,12 +497,13 @@ The game ships in Greek and English. The rules that keeps that from rotting:
   nineteen times. `src/enemykind.asm` maps the type byte to a sprite and a behaviour;
   adding one costs three bytes there plus its picture.
 - **How many lives he starts with is the difficulty**: nine, six or three, out of
-  the same `diff_tab` record as the three bytes that pace the cast. The number he
-  started on is also his ceiling, because the HUD prints the lives with
-  `print_digit` and ten would print whatever follows 9 - so the saucer of milk tops
-  him back up rather than past it. That means a clean scripted run never sees the
-  saucer give a life at all, only the points it is worth instead, which is why
-  `make check` pokes a life away first (`z80check.py --poke`).
+  the same `diff_tab` record as the three bytes that pace the cast. Nine is the
+  ceiling on every setting (`LIVES_CEILING`), because the HUD prints the lives with
+  `print_digit` and ten would print whatever follows 9 - so the saucer of milk
+  adds a life on medium and hard even with none lost, until he has nine. The
+  scripted lounge run starts on nine, so it never sees the saucer give a life,
+  only its points, which is why `make check` pokes a life away first
+  (`z80check.py --poke`).
 - Every third room has a saucer of milk in it, worth one life back. It is not
   one of the sausages and the way out does not wait for it, so a room can be finished
   without it - and it is always on the awkward shelf, usually one something is

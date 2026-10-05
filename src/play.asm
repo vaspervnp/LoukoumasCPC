@@ -58,14 +58,16 @@ WELLDONE_YS     EQU 3
 
 ;; How many lives he starts with is the difficulty setting - nine, six or
 ;; three - and it lives in start_lives, next to the three bytes that pace the
-;; cast. LIVES_CEILING in config.asm is as high as any of them may go.
+;; cast. LIVES_CEILING in config.asm is as high as any of them may go, and as
+;; high as the saucer of milk will take him on any of them.
 INVUL_FRAMES    EQU 100         ; two seconds of grace after a respawn
 
 ;; A saucer of milk, in every third room. Twenty-nine rooms is a long way on
-;; any setting, so there is a way to earn one back - but it is only ever one,
-;; it is always on the awkward shelf, and it never takes him past the number he
-;; started with: full up, it is worth points instead. The room has five
-;; sausages to find either way.
+;; any setting, so there is a way to earn one back - only ever one, and always
+;; on the awkward shelf. It takes him as far as LIVES_CEILING whatever he
+;; started on, so on medium and hard it can build up lives he never had; on
+;; easy, which starts at nine, it only gives back what was lost. It is worth
+;; MILK_POINTS either way. The room has five sausages to find regardless.
 MILK_POINTS     EQU #05         ; BCD, into the hundreds digit
 MILK_FLASH_LEN  EQU 12          ; frames the border flashes to say it counted
 MILK_FLASH_COL  EQU 3           ; pale yellow, hardware colour 3
@@ -972,10 +974,9 @@ check_milk
     xor a
     ld (milk_alive),a
     call erase_milk
-    ld hl,start_lives           ; back up to what this difficulty started him
-    ld a,(cat_lives)            ; on, and no further
-    cp (hl)
-    jr nc,check_milk_score      ; already full: it is worth points instead
+    ld a,(cat_lives)            ; a life, on any setting, as far as nine:
+    cp LIVES_CEILING            ; medium and hard can climb above where they
+    jr nc,check_milk_score      ; started. Full up, it is only the points
     inc a
     ld (cat_lives),a
 check_milk_score

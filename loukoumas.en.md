@@ -124,8 +124,9 @@ movement code: a new creature costs three bytes there plus its picture.
 ### 2.4. The saucer of milk
 
 The design had it as a speed power-up. Over 29 rooms something more basic was
-wanted: **one life back, and never past the number the difficulty started him
-on** (points instead, while he still has all of them). There is one in **every third room** (3, 6, 9, 12, 15,
+wanted: **one life, up to nine on any difficulty**, plus points every time. On
+medium and hard that builds lives above the starting count; on easy, which
+starts at nine, it only gives back what was lost. There is one in **every third room** (3, 6, 9, 12, 15,
 18, 21, 24, 27), always on the most awkward shelf - usually the one something is
 patrolling - and the way out does not wait for it: a room can be finished
 without it.
@@ -186,10 +187,10 @@ Exactly how it works, and where each part lives:
   loads. They carry no mask, because the screen underneath has just been cleared
   to pen 0 and ORing 0 changes nothing: half the bytes of a masked sprite, and
   the cost is paid once.
-* **Lives and score:** nine, six or three, from the difficulty - see 3.3. The
-  number he started on is also his ceiling, so the saucer of milk tops him back
-  up rather than past it, and nine is as high as any of them goes because the
-  HUD prints the lives with one digit. The score is packed BCD, so the
+* **Lives and score:** nine, six or three, from the difficulty - see 3.3. Nine
+  is the ceiling on every difficulty, because the HUD prints the lives with one
+  digit, and it is as far as the saucer of milk will take him: on medium and
+  hard it adds lives he never started with. The score is packed BCD, so the
   arithmetic is `DAA` and printing is two digits a byte - no division.
 * **HUD:** two rows above the play field - score, lives, sausages, room name -
   and it only repaints when something has changed.
