@@ -223,8 +223,8 @@ Rolling makes the cat shorter as well as faster, which is the point — 16 scanl
 instead of 24 fits under things the standing cat does not. Changing sprite height keeps
 the feet anchored, so curling up and standing back up neither sinks nor hops.
 
-The belly-flop drops at terminal velocity, lands flat, stuns for 14 frames and shakes the
-room. The shake moves **R7**, the VSYNC position, which slides the whole picture against
+The belly-flop drops at terminal velocity, lands flat, leaves the cat winded for 14 frames
+(`FLOP_STUN` - the cat's own stun, not the enemies') and shakes the room. The shake moves **R7**, the VSYNC position, which slides the whole picture against
 the monitor without touching a byte of screen memory. Shifting `R12`/`R13` would have been
 the obvious trick and is wrong here: the screen base is chosen so the page 2 to page 3
 crossing lands exactly on a character row, and moving it scrambles the row where the
@@ -246,7 +246,10 @@ Touching any of them costs a life; the cat respawns with two seconds of grace.
 The belly-flop is the answer to a robot that patrols a whole shelf. Landing on your belly
 stuns everything at roughly the height you landed at, however far along the shelf it is —
 the whole floor shook, not a patch of it — and a stunned enemy stops dead and is
-harmless. `make check` asserts exactly that: the flop freezes the shelf robot, the cat
+harmless. "Roughly" is `FLOP_REACH_Y`, 40 scanlines between the top of the flat cat and
+the top of the enemy, which with shelves 32 apart is the landing shelf and one either
+side; how long it lasts is `stun_time`, two to four seconds by difficulty. The full
+rule, with where each part lives, is in section 3.1 of `loukoumas.en.md`. `make check` asserts exactly that: the flop freezes the shelf robot, the cat
 walks straight through it to take the sausage it was guarding, and loses no lives.
 
 Now that more than one thing moves, ordering matters: everything is erased in the exact

@@ -98,6 +98,41 @@ This is not a trick. It is the answer to a robot that patrols a whole shelf and
 will not let you near the sausage on the end of it. Flop, then walk straight
 through it while it sees stars.
 
+**How to do it**
+
+* You have to be **in the air** — on the way up, at the top, or falling. Walking
+  off the edge of a shelf counts as much as a jump does. On the ground, `↓` is a
+  roll and nothing else.
+* Hold `↓` first, then **press** `SPACE` (or fire). Holding fire down from the
+  jump does nothing: it has to be a fresh press while `↓` is held. `↑` will not
+  do it — only `SPACE` or fire.
+* Once he has tucked in there is no taking it back. He drops at full speed,
+  straight down, and still drifts left and right if you steer.
+
+**Where it reaches**
+
+* The stun goes off **on landing**, not when you press the button. Flop in
+  mid-air over a robot and it is the shelf you come down on that counts.
+* It reaches **sideways across the whole room**. Distance along the shelf does
+  not matter at all.
+* It reaches **up and down by about one shelf**: the shelf you landed on, the
+  one just above it and the one just below. Anything two shelves away keeps
+  coming.
+* Things in the air are caught too, if they are inside that band at the moment
+  you land. A canary on its way through stops dead in mid-flight.
+
+**What it does, and for how long**
+
+* A stunned enemy **stops where it is and cannot hurt you**. Walk through it,
+  stand on its shelf, take the sausage behind it.
+* It stays down for **two, three or four seconds**, depending on the difficulty
+  (see *HOW HARD DO YOU WANT IT*). There is no warning when it gets up — it simply starts
+  moving again, and from that moment it is dangerous.
+* Flop again and the clock starts again, at full length, for everything in reach.
+* **Loukoumas pays for it too**: for about a quarter of a second after landing
+  he lies flat and does not answer the controls. Anything awake and out of
+  reach — a bird two shelves up, say — can still catch him there.
+
 *A stunned enemy is harmless scenery — but only until it gets back up.*
 
 ---

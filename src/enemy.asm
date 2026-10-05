@@ -239,6 +239,13 @@ enemy_bounce_clamp
 ;; the cat landed at stops dead and is harmless while it does, however far
 ;; along the shelf it is: the whole floor shook, not a patch of it. That makes
 ;; the flop the tool for getting past a robot that patrols a whole shelf.
+;;
+;; Called once, from cat_air_land, on the frame a flop touches down - never on
+;; the press. "Roughly the height" is the top of the flat cat against the top
+;; of the enemy, within FLOP_REACH_Y either way; shelves are 32 apart, so that
+;; is the landing shelf and one either side. x is never looked at. The length
+;; is stun_time (diff_tab), counted down per logic step in enemy_update_one,
+;; and a second flop reloads it rather than adding to it.
 ;; ---------------------------------------------------------------------------
 enemies_stun
     ld iy,enemies

@@ -156,6 +156,18 @@ along the shelf it happens to be. That is deliberate - it makes the flop the way
 to get past a robot patrolling a whole shelf, which a short shockwave did not. A
 stunned enemy neither dies nor hurts: it is scenery, until it gets up.
 
+Exactly how it works, and where each part lives:
+
+| | Rule | Where |
+|---|---|---|
+| Trigger | in the air (`cat_air`, so a fall counts as much as a jump), Down held and Fire *pressed* (an edge, not a level) | `cat_air`, `src/play.asm` |
+| The drop | `FLOP_V` = +8.0 px/frame, then capped by `MAX_FALL`; still steerable sideways | `src/play.asm` |
+| When it fires | on landing on a platform, not on the press | `cat_air_land` → `enemies_stun` |
+| Reach | `\|cat_y - enemy_y\| <= FLOP_REACH_Y` (40 scanlines), top of the flat cat against top of the enemy; x is ignored. Shelves are 32 apart, so that is the landing shelf and one either side | `enemy_stun_one`, `src/enemy.asm` |
+| Length | `E_STUN` = `stun_time` from `diff_tab` (100/150/200 logic steps = 2/3/4 s), counted down once per 50 Hz step in `enemy_update_one`. A second flop reloads it | `src/enemy.asm`, `src/loukoumas.asm` |
+| Effect | a stunned enemy skips its movement and `enemies_hit_cat` ignores it; its picture does not change | `src/enemy.asm` |
+| The cat's cost | `cat_stun` = `FLOP_STUN` (14 steps, 0.28 s) flat with no input, plus `SHAKE_LEN` of R7 shake | `src/play.asm` |
+
 ### 3.2. Screen elements and objects
 
 * **Sausages:** 5 per room. Take all five and the door or the vent **changes
