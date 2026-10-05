@@ -108,6 +108,11 @@ docs/cover-%.png: assets/art/title.jpg $(SHOTS) tools/mkcover.py
 	$(PYTHON) tools/mkcover.py assets/art/title.jpg $* $@ \
 		$(foreach s,$(COVER_SCENES),docs/loukoumas-$(s)-$*.png)
 
+# The front comes out of the same run as the wrap. Without a rule of its own
+# the one above claims it with $* = en-front, which mkcover refuses.
+docs/cover-%-front.png: docs/cover-%.png
+	@:
+
 # The tables - font, strings, sprites, artwork, enemy kinds, rooms - assembled
 # at the address they run at and saved raw, then packed. Twelve and a half
 # kilobytes of the file becomes eight and a half, and the game unpacks them in
